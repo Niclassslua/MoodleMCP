@@ -98,7 +98,7 @@ codex mcp get mcd
 
 **ChatGPT Desktop (Work mode)**
 
-The included local plugin connects mcd to ChatGPT Desktop in **Work mode**. It runs the server on your Mac and uses a separate copy of your `.env` file. From the repository root, after building `bin/mcd` and creating `.env`:
+The included local plugin connects mcd to ChatGPT Desktop in **Work mode**. It runs the server on your Mac and uses a separate copy of your `.env` file. From the repository root or extracted release folder, after preparing `bin/mcd` and creating `.env`:
 
 ```bash
 mkdir -p "$HOME/.local/bin" "$HOME/.config/moodle-mcp"
@@ -113,7 +113,7 @@ CHATGPT_CODEX="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.a
 
 Restart ChatGPT Desktop, start a Work mode thread, and select **Moodle MCP** with `@`. Ask it to use the plugin's `doctor` tool. Local plugins require a thread running on your Mac; they are not available in ordinary cloud chats. See [OpenAI's desktop plugin documentation](https://developers.openai.com/plugins/deploy/desktop-only).
 
-After rebuilding mcd, copy the new binary to `~/.local/bin/moodle-mcp` and restart ChatGPT. If your login changes, update `~/.config/moodle-mcp/.env` too. The plugin marketplace remains in this repository, so keep the repository in place. If the plugin doesn't appear, check `"$CHATGPT_CODEX" plugin list` and reinstall it with the two plugin commands above.
+After rebuilding mcd, copy the new binary to `~/.local/bin/moodle-mcp` and restart ChatGPT. If your login changes, update `~/.config/moodle-mcp/.env` too. The plugin marketplace remains in the repository or extracted release folder, so keep that folder in place. If the plugin doesn't appear, check `"$CHATGPT_CODEX" plugin list` and reinstall it with the two plugin commands above.
 
 **Claude Desktop**
 
