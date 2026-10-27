@@ -1,0 +1,27 @@
+# Credentials (MOODLE_URL, MOODLE_USERNAME, MOODLE_PASSWORD / MOODLE_TOKEN)
+.env
+.env.*
+!.env.example
+
+# Build output
+/bin/
+*.exe
+
+# Downloaded course material (default output of `mcd download` / `mcd sync`)
+/downloads/
+
+# Personal sync list for `mcd sync --file courses.json`
+/courses.json
+
+# Go tooling
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
