@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Niclassslua/mcd/internal/app"
-	"github.com/Niclassslua/mcd/internal/course"
-	"github.com/Niclassslua/mcd/internal/moodle"
+	"github.com/Niclassslua/MoodleMCP/internal/app"
+	"github.com/Niclassslua/MoodleMCP/internal/course"
+	"github.com/Niclassslua/MoodleMCP/internal/moodle"
 	"github.com/google/jsonschema-go/jsonschema"
 	mcpserver "github.com/modelcontextprotocol/go-sdk/mcp"
 )

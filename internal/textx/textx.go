@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/forum"
+	"github.com/Niclassslua/MoodleMCP/internal/forum"
 )
 
 var ErrUnsupported = errors.New("unsupported file type")

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "moodle-mcp",
+  "version": "1.0.0",
+  "description": "Access your Moodle courses using mcd.",
+  "author": {
+    "name": "Niclassslua"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Moodle MCP",
+        "shortDescription": "Access your Moodle courses",
+        "longDescription": "Access Moodle courses, deadlines, forums, messages, and downloads.",
+        "developerName": "Niclassslua",
+        "category": "Productivity"
+      }
+    }
+  }
+}

@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/app"
-	"github.com/Niclassslua/mcd/internal/config"
-	"github.com/Niclassslua/mcd/internal/moodle"
+	"github.com/Niclassslua/MoodleMCP/internal/app"
+	"github.com/Niclassslua/MoodleMCP/internal/config"
+	"github.com/Niclassslua/MoodleMCP/internal/moodle"
 	mcpserver "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

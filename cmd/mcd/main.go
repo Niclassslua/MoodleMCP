@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/app"
-	mcpserver "github.com/Niclassslua/mcd/internal/mcp"
+	"github.com/Niclassslua/MoodleMCP/internal/app"
+	mcpserver "github.com/Niclassslua/MoodleMCP/internal/mcp"
 )
 
 const version = "0.3.0"

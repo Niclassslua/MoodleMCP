@@ -5,7 +5,7 @@ Also exposes the same operations over **MCP** so AI apps (Claude Desktop, Claude
 
 ## Installation
 
-Download a prebuilt archive for macOS, Linux, or Windows from [GitHub Releases](https://github.com/Niclassslua/mcd/releases). Extract it, create a `bin` folder, and move the executable to `bin/mcd` (Windows: `bin/mcd.exe`). Then continue with step 3 in the extracted folder; Go is only needed to build from source. The commands below are for macOS and Linux.
+Download a prebuilt archive for macOS, Linux, or Windows from [GitHub Releases](https://github.com/Niclassslua/MoodleMCP/releases). Extract it, create a `bin` folder, and move the executable to `bin/mcd` (Windows: `bin/mcd.exe`). Then continue with step 3 in the extracted folder; Go is only needed to build from source. The commands below are for macOS and Linux.
 
 ### 1. Check the requirements
 
@@ -17,8 +17,8 @@ Download a prebuilt archive for macOS, Linux, or Windows from [GitHub Releases](
 ### 2. Download and build
 
 ```bash
-git clone https://github.com/Niclassslua/mcd.git
-cd mcd
+git clone https://github.com/Niclassslua/MoodleMCP.git
+cd MoodleMCP
 go build -o bin/mcd ./cmd/mcd
 ```
 
@@ -26,10 +26,10 @@ This creates the program at `bin/mcd`. Nothing is installed system-wide.
 
 ### 3. Add your Moodle login
 
-Create a file called `.env` in the repository root (`mcd/.env`):
+Create a file called `.env` in the repository root (`MoodleMCP/.env`):
 
 ```bash
-# mcd/.env
+# MoodleMCP/.env
 MOODLE_URL=https://moodle.your-university.de
 MOODLE_USERNAME=your-username
 MOODLE_PASSWORD=your-password
@@ -67,14 +67,14 @@ You can now use the [command line](#cli), for example `./bin/mcd list` to see yo
 
 ### 5. Connect an AI app (optional)
 
-AI apps start mcd themselves in the background, from an unknown folder. So every path you give them must be an **absolute path**. Print the two paths you need from inside the `mcd` folder:
+AI apps start mcd themselves in the background, from an unknown folder. So every path you give them must be an **absolute path**. Print the two paths you need from inside the `MoodleMCP` folder:
 
 ```bash
 echo "Program:  $(pwd)/bin/mcd"
 echo ".env:     $(pwd)/.env"
 ```
 
-In the examples below, replace `/ABS/mcd/bin/mcd` and `/ABS/mcd/.env` with those two paths.
+In the examples below, replace `/ABS/MoodleMCP/bin/mcd` and `/ABS/MoodleMCP/.env` with those two paths.
 
 The apps get only the *location* of your `.env` file (`MCD_ENV_FILE`), never your password. `MCD_OUT` is the folder where downloads go.
 
@@ -82,8 +82,8 @@ The apps get only the *location* of your `.env` file (`MCD_ENV_FILE`), never you
 
 ```bash
 claude mcp add -s user mcd \
-  -e MCD_ENV_FILE=/ABS/mcd/.env -e MCD_OUT=$HOME/Downloads/Moodle \
-  -- /ABS/mcd/bin/mcd mcp serve
+  -e MCD_ENV_FILE=/ABS/MoodleMCP/.env -e MCD_OUT=$HOME/Downloads/Moodle \
+  -- /ABS/MoodleMCP/bin/mcd mcp serve
 claude mcp get mcd     # should show: Status: ✔ Connected
 ```
 
@@ -91,10 +91,29 @@ claude mcp get mcd     # should show: Status: ✔ Connected
 
 ```bash
 codex mcp add mcd \
-  --env MCD_ENV_FILE=/ABS/mcd/.env --env MCD_OUT=$HOME/Downloads/Moodle \
-  -- /ABS/mcd/bin/mcd mcp serve
+  --env MCD_ENV_FILE=/ABS/MoodleMCP/.env --env MCD_OUT=$HOME/Downloads/Moodle \
+  -- /ABS/MoodleMCP/bin/mcd mcp serve
 codex mcp get mcd
 ```
+
+**ChatGPT Desktop (Work mode)**
+
+The included local plugin connects mcd to ChatGPT Desktop in **Work mode**. It runs the server on your Mac and uses a separate copy of your `.env` file. From the repository root, after building `bin/mcd` and creating `.env`:
+
+```bash
+mkdir -p "$HOME/.local/bin" "$HOME/.config/moodle-mcp"
+cp bin/mcd "$HOME/.local/bin/moodle-mcp"
+cp .env "$HOME/.config/moodle-mcp/.env"
+chmod 600 "$HOME/.config/moodle-mcp/.env"
+CHATGPT_CODEX="/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+"$CHATGPT_CODEX" plugin marketplace add "$(pwd)/chatgpt-marketplace"
+"$CHATGPT_CODEX" plugin add moodle-mcp@moodle-mcp-local
+"$CHATGPT_CODEX" plugin list
+```
+
+Restart ChatGPT Desktop, start a Work mode thread, and select **Moodle MCP** with `@`. Ask it to use the plugin's `doctor` tool. Local plugins require a thread running on your Mac; they are not available in ordinary cloud chats. See [OpenAI's desktop plugin documentation](https://developers.openai.com/plugins/deploy/desktop-only).
+
+After rebuilding mcd, copy the new binary to `~/.local/bin/moodle-mcp` and restart ChatGPT. If your login changes, update `~/.config/moodle-mcp/.env` too. The plugin marketplace remains in this repository, so keep the repository in place. If the plugin doesn't appear, check `"$CHATGPT_CODEX" plugin list` and reinstall it with the two plugin commands above.
 
 **Claude Desktop**
 
@@ -105,10 +124,10 @@ codex mcp get mcd
    {
      "mcpServers": {
        "mcd": {
-         "command": "/ABS/mcd/bin/mcd",
+         "command": "/ABS/MoodleMCP/bin/mcd",
          "args": ["mcp", "serve"],
          "env": {
-           "MCD_ENV_FILE": "/ABS/mcd/.env",
+           "MCD_ENV_FILE": "/ABS/MoodleMCP/.env",
            "MCD_OUT": "/Users/YOU/Downloads/Moodle"
          }
        }
@@ -135,7 +154,7 @@ Mention mcd by name in the first prompt. If you just write "run mcd doctor", som
 ### Updating
 
 ```bash
-cd mcd && git pull
+cd MoodleMCP && git pull
 go build -o bin/mcd ./cmd/mcd
 ```
 

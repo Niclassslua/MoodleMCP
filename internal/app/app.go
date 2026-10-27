@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/config"
-	"github.com/Niclassslua/mcd/internal/course"
-	"github.com/Niclassslua/mcd/internal/forum"
-	"github.com/Niclassslua/mcd/internal/fsname"
-	"github.com/Niclassslua/mcd/internal/message"
-	"github.com/Niclassslua/mcd/internal/moodle"
-	"github.com/Niclassslua/mcd/internal/textx"
+	"github.com/Niclassslua/MoodleMCP/internal/config"
+	"github.com/Niclassslua/MoodleMCP/internal/course"
+	"github.com/Niclassslua/MoodleMCP/internal/forum"
+	"github.com/Niclassslua/MoodleMCP/internal/fsname"
+	"github.com/Niclassslua/MoodleMCP/internal/message"
+	"github.com/Niclassslua/MoodleMCP/internal/moodle"
+	"github.com/Niclassslua/MoodleMCP/internal/textx"
 )
 
 type App struct {

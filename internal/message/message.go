@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/forum"
-	"github.com/Niclassslua/mcd/internal/fsname"
-	"github.com/Niclassslua/mcd/internal/moodle"
+	"github.com/Niclassslua/MoodleMCP/internal/forum"
+	"github.com/Niclassslua/MoodleMCP/internal/fsname"
+	"github.com/Niclassslua/MoodleMCP/internal/moodle"
 )
 
 // Conversation types from core_message.

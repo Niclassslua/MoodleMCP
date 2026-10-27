@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "moodle-mcp": {
+      "type": "stdio",
+      "command": "/bin/sh",
+      "args": [
+        "${PLUGIN_ROOT}/run.sh"
+      ],
+      "startup_timeout_sec": 30
+    }
+  }
+}

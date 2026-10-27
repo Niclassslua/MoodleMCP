@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Niclassslua/mcd/internal/config"
+	"github.com/Niclassslua/MoodleMCP/internal/config"
 )
 
 type Client struct {

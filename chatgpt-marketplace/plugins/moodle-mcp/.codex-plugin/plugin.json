@@ -1,0 +1,10 @@
+{
+  "name": "moodle-mcp",
+  "version": "1.0.0",
+  "description": "Access your Moodle courses using mcd.",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Moodle MCP",
+    "category": "Productivity"
+  }
+}

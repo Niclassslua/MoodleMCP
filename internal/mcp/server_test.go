@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Niclassslua/mcd/internal/app"
+	"github.com/Niclassslua/MoodleMCP/internal/app"
 	mcpserver "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

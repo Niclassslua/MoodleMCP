@@ -1,4 +1,4 @@
-module github.com/Niclassslua/mcd
+module github.com/Niclassslua/MoodleMCP
 
 go 1.27.1
 
