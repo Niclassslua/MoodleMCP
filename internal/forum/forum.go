@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Niclassslua/MoodleMCP/internal/fsname"
 	"github.com/Niclassslua/MoodleMCP/internal/moodle"
@@ -26,6 +27,15 @@ type Discussion struct {
 	UserFullName string `json:"userfullname"`
 	NumReplies   int    `json:"numreplies"`
 	Pinned       bool   `json:"pinned"`
+	Locked       bool   `json:"locked"`
+	UserID       int    `json:"userid"`
+	TimeStart    int64  `json:"timestart"`
+	TimeEnd      int64  `json:"timeend"`
+	Starred      bool   `json:"starred"`
+	NumUnread    int    `json:"numunread"`
+	Attachment   bool   `json:"attachment"`
+	CanReply     bool   `json:"canreply"`
+	CanLock      bool   `json:"canlock"`
 }
 
 func (d Discussion) DiscussionID() int {
@@ -128,6 +138,21 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 
 		var b strings.Builder
 		b.WriteString("# " + title + "\n\n")
+		if d.Locked {
+			b.WriteString("_Gesperrt_\n\n")
+		}
+		b.WriteString(fmt.Sprintf("- Autor: %s (ID %d)\n", d.UserFullName, d.UserID))
+		b.WriteString(fmt.Sprintf("- Erstellt: %s\n", localTime(d.Created)))
+		if d.TimeStart != 0 {
+			b.WriteString(fmt.Sprintf("- Sichtbar ab: %s\n", localTime(d.TimeStart)))
+		}
+		if d.TimeEnd != 0 {
+			b.WriteString(fmt.Sprintf("- Sichtbar bis: %s\n", localTime(d.TimeEnd)))
+		}
+		b.WriteString(fmt.Sprintf("- Antworten: %d, ungelesen: %d\n", d.NumReplies, d.NumUnread))
+		b.WriteString(fmt.Sprintf("- Anhang: %s\n", yesNo(d.Attachment)))
+		b.WriteString(fmt.Sprintf("- Markiert: %s\n", yesNo(d.Starred)))
+		b.WriteString(fmt.Sprintf("- Antworten erlaubt: %s, Sperren erlaubt: %s\n\n", yesNo(d.CanReply), yesNo(d.CanLock)))
 		for _, p := range posts.Posts {
 			author := p.Author.Name
 			if author == "" {
@@ -156,6 +181,20 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 		written++
 	}
 	return written, nil
+}
+
+func localTime(unix int64) string {
+	if unix == 0 {
+		return ""
+	}
+	return time.Unix(unix, 0).Local().Format("2006-01-02 15:04")
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "ja"
+	}
+	return "nein"
 }
 
 func saveFile(c *moodle.Client, fileURL, dest string) error {

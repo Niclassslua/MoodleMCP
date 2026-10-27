@@ -97,7 +97,7 @@ func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
 			out = map[string]any{"discussions": []any{}}
 			if q.Get("forumid") == "9" {
 				out = map[string]any{"discussions": []any{
-					map[string]any{"id": 1, "discussion": 100, "name": "Old", "userfullname": "Prof", "created": 1700000000, "timemodified": 1700000000, "numreplies": 2},
+					map[string]any{"id": 1, "discussion": 100, "name": "Old", "userfullname": "Prof", "created": 1700000000, "timemodified": 1700000000, "numreplies": 2, "locked": true},
 					map[string]any{"id": 2, "discussion": 200, "name": "New", "userfullname": "Prof", "created": 1700090000, "timemodified": 1700090000},
 				}}
 			}

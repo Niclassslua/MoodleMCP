@@ -464,6 +464,15 @@ type ForumHit struct {
 	LastActivity string `json:"lastActivity,omitempty"`
 	Replies      int    `json:"replies"`
 	Pinned       bool   `json:"pinned,omitempty"`
+	Locked       bool   `json:"locked,omitempty"`
+	UserID       int    `json:"userId,omitempty"`
+	TimeStart    string `json:"timeStart,omitempty"`
+	TimeEnd      string `json:"timeEnd,omitempty"`
+	Starred      bool   `json:"starred,omitempty"`
+	Unread       int    `json:"unread,omitempty"`
+	Attachment   bool   `json:"attachment,omitempty"`
+	CanReply     bool   `json:"canReply"`
+	CanLock      bool   `json:"canLock"`
 	Posts        int    `json:"posts,omitempty"`
 	Snippet      string `json:"snippet,omitempty"`
 }
@@ -537,7 +546,9 @@ func (a *App) courseForumHits(co moodle.Course, q string, includePosts bool) ([]
 					continue
 				}
 				hit := ForumHit{Course: co.FullName, Forum: mod.Name, Discussion: name, DiscussionID: d.DiscussionID(), URL: a.discussionURL(d.DiscussionID()), Author: d.UserFullName,
-					Created: localTime(d.Created), LastActivity: localTime(d.TimeModified), Replies: d.NumReplies, Pinned: d.Pinned}
+					Created: localTime(d.Created), LastActivity: localTime(d.TimeModified), Replies: d.NumReplies, Pinned: d.Pinned, Locked: d.Locked,
+					UserID: d.UserID, TimeStart: localTime(d.TimeStart), TimeEnd: localTime(d.TimeEnd), Starred: d.Starred,
+					Unread: d.NumUnread, Attachment: d.Attachment, CanReply: d.CanReply, CanLock: d.CanLock}
 				if includePosts {
 					posts, _ := forum.ListPosts(a.Client, d.DiscussionID())
 					hit.Posts = len(posts)
