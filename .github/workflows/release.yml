@@ -33,6 +33,16 @@ jobs:
             rm -r "dist/$name"
           done
           (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+      - name: Sign checksums
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          # Ed25519 over checksums.txt; the matching public key is release-signing.pub.pem
+          key="$RUNNER_TEMP/signing-key.pem"
+          (umask 077; printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key")
+          openssl pkeyutl -sign -rawin -inkey "$key" -in dist/checksums.txt -out dist/checksums.txt.sig
+          rm "$key"
+          openssl pkeyutl -verify -rawin -pubin -inkey release-signing.pub.pem -in dist/checksums.txt -sigfile dist/checksums.txt.sig
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
