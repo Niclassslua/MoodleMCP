@@ -32,6 +32,7 @@ type Options struct {
 	Concurrency  int
 	SkipExisting bool
 	Force        bool
+	SkipLocked   bool // leave out forum discussions Moodle marks as locked (Gesperrt)
 	State        *syncstate.State
 }
 
@@ -220,7 +221,7 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 					skipped.Add(1)
 					continue
 				}
-				n, err := forum.Export(c, mod.Instance, mod.Name, forumDir, opt.FilenameMode)
+				n, err := forum.Export(c, mod.Instance, mod.Name, forumDir, opt.FilenameMode, opt.SkipLocked)
 				if err != nil {
 					return Result{}, fmt.Errorf("forum %q: %w", mod.Name, err)
 				}
@@ -297,6 +298,19 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 	wg.Wait()
 	if firstErr != nil {
 		return Result{}, firstErr
+	}
+
+	if wantResources {
+		for _, sec := range sections {
+			secName := sec.Name
+			if secName == "" {
+				secName = "section"
+			}
+			secDir := filepath.Join(courseDir, fsname.Sanitize(secName, opt.FilenameMode))
+			if err := writeSectionIndex(secDir, secName, sec.Modules, opt.FilenameMode); err != nil {
+				return Result{}, fmt.Errorf("index %q: %w", secName, err)
+			}
+		}
 	}
 
 	// course.json metadata

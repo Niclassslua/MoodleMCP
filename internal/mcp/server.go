@@ -246,10 +246,11 @@ func newServer(version string, newApp func() (*app.App, error)) *mcpserver.Serve
 	})
 
 	type downloadIn struct {
-		Course courseRef `json:"course" jsonschema:"course id, URL, shortname, or unique name substring"`
-		Out    string    `json:"out,omitempty" jsonschema:"local output directory; relative paths resolve under the default, which is $MCD_OUT or ~/Downloads/Moodle"`
-		Mode   string    `json:"mode,omitempty" jsonschema:"all, resources-only, or forums-only; default all"`
-		Force  bool      `json:"force,omitempty" jsonschema:"re-download existing files; default false"`
+		Course     courseRef `json:"course" jsonschema:"course id, URL, shortname, or unique name substring"`
+		Out        string    `json:"out,omitempty" jsonschema:"local output directory; relative paths resolve under the default, which is $MCD_OUT or ~/Downloads/Moodle"`
+		Mode       string    `json:"mode,omitempty" jsonschema:"all, resources-only, or forums-only; default all"`
+		Force      bool      `json:"force,omitempty" jsonschema:"re-download existing files; default false"`
+		SkipLocked bool      `json:"skip_locked,omitempty" jsonschema:"leave out forum discussions Moodle marks as locked (Gesperrt); default false"`
 	}
 	add(server, addWrite("download_course", "Download course", "Download Moodle course materials to the local filesystem. Writes under out (default $MCD_OUT or ~/Downloads/Moodle) and returns the absolute course directory; mode is all, resources-only, or forums-only. This can create or overwrite local files.", true), connect, func(a *app.App, in downloadIn) (course.Result, error) {
 		out, err := resolveOut(in.Out)
@@ -263,7 +264,7 @@ func newServer(version string, newApp func() (*app.App, error)) *mcpserver.Serve
 		if err := validateMode(mode); err != nil {
 			return course.Result{}, err
 		}
-		return a.Download(app.DownloadOpts{Course: string(in.Course), OutDir: out, Mode: mode, Force: in.Force, Concurrency: 4})
+		return a.Download(app.DownloadOpts{Course: string(in.Course), OutDir: out, Mode: mode, Force: in.Force, SkipLocked: in.SkipLocked, Concurrency: 4})
 	})
 
 	type dueIn struct {
@@ -299,10 +300,11 @@ func newServer(version string, newApp func() (*app.App, error)) *mcpserver.Serve
 	})
 
 	type syncIn struct {
-		Course courseRef `json:"course" jsonschema:"course id, URL, shortname, or unique name substring"`
-		Out    string    `json:"out,omitempty" jsonschema:"local output directory; relative paths resolve under the default, which is $MCD_OUT or ~/Downloads/Moodle"`
-		Force  bool      `json:"force,omitempty" jsonschema:"force re-download; default false"`
-		Mode   string    `json:"mode,omitempty" jsonschema:"all, resources-only, or forums-only; default all"`
+		Course     courseRef `json:"course" jsonschema:"course id, URL, shortname, or unique name substring"`
+		Out        string    `json:"out,omitempty" jsonschema:"local output directory; relative paths resolve under the default, which is $MCD_OUT or ~/Downloads/Moodle"`
+		Force      bool      `json:"force,omitempty" jsonschema:"force re-download; default false"`
+		SkipLocked bool      `json:"skip_locked,omitempty" jsonschema:"leave out forum discussions Moodle marks as locked (Gesperrt); default false"`
+		Mode       string    `json:"mode,omitempty" jsonschema:"all, resources-only, or forums-only; default all"`
 	}
 	add(server, addWrite("sync_courses", "Sync course", "Incrementally synchronize one Moodle course to the local filesystem, skipping unchanged files. Creates or updates files under out (default $MCD_OUT or ~/Downloads/Moodle) and returns the absolute course directory. Repeating the same sync is safe.", true), connect, func(a *app.App, in syncIn) (syncOutput, error) {
 		out, err := resolveOut(in.Out)
@@ -316,7 +318,7 @@ func newServer(version string, newApp func() (*app.App, error)) *mcpserver.Serve
 		if err := validateMode(mode); err != nil {
 			return syncOutput{}, err
 		}
-		results, err := a.SyncOnce(app.SyncOpts{Items: []app.SyncItem{{Course: string(in.Course), Out: out, Mode: mode}}, Force: in.Force, Concurrency: 4})
+		results, err := a.SyncOnce(app.SyncOpts{Items: []app.SyncItem{{Course: string(in.Course), Out: out, Mode: mode}}, Force: in.Force, SkipLocked: in.SkipLocked, Concurrency: 4})
 		return syncOutput{Results: results}, err
 	})
 

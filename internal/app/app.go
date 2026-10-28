@@ -382,6 +382,7 @@ type DownloadOpts struct {
 	Concurrency  int
 	SkipExisting bool
 	Force        bool
+	SkipLocked   bool
 }
 
 func (a *App) Download(opt DownloadOpts) (course.Result, error) {
@@ -406,6 +407,7 @@ func (a *App) Download(opt DownloadOpts) (course.Result, error) {
 		Concurrency:  opt.Concurrency,
 		SkipExisting: skip,
 		Force:        opt.Force,
+		SkipLocked:   opt.SkipLocked,
 	})
 }
 
@@ -422,6 +424,7 @@ type SyncOpts struct {
 	FilenameMode string
 	Concurrency  int
 	Force        bool
+	SkipLocked   bool
 	Interval     time.Duration
 }
 
@@ -444,6 +447,7 @@ func (a *App) SyncOnce(opt SyncOpts) ([]course.Result, error) {
 			Concurrency:  opt.Concurrency,
 			SkipExisting: true,
 			Force:        opt.Force,
+			SkipLocked:   opt.SkipLocked,
 		})
 		if err != nil {
 			return results, err

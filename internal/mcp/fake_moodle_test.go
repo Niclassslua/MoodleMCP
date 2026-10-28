@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -102,7 +104,7 @@ func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
 				}}
 			}
 		case "mod_forum_get_discussion_posts":
-			if q.Get("discussionid") != "100" {
+			if id := q.Get("discussionid"); id != "100" && id != "200" {
 				out = map[string]any{"exception": "dml_missing_record_exception", "errorcode": "invalidrecord", "message": "Can't find data record"}
 				break
 			}
@@ -283,6 +285,27 @@ func TestForumDiscussionsAndPosts(t *testing.T) {
 	}
 	if strings.Join(texts, ",") != "first,second,third" {
 		t.Errorf("posts = %v, want oldest first without HTML", texts)
+	}
+}
+
+// Discussion "Old" is locked in the fixture, "New" is not.
+func TestDownloadSkipLockedLeavesOutLockedDiscussions(t *testing.T) {
+	cs := fakeMoodle(t)
+	exported := func(skipLocked bool) (old, fresh bool) {
+		r := call(t, cs, "download_course", map[string]any{"course": "c04", "mode": "forums-only", "out": t.TempDir(), "skip_locked": skipLocked})
+		if r.isError {
+			t.Fatal(r.text)
+		}
+		forumDir := filepath.Join(r.structured["courseDir"].(string), "General", "News")
+		_, errOld := os.Stat(filepath.Join(forumDir, "Old"))
+		_, errNew := os.Stat(filepath.Join(forumDir, "New", "New.md"))
+		return errOld == nil, errNew == nil
+	}
+	if old, fresh := exported(false); !old || !fresh {
+		t.Errorf("without skip_locked: Old=%v New=%v, want both exported", old, fresh)
+	}
+	if old, fresh := exported(true); old || !fresh {
+		t.Errorf("with skip_locked: Old=%v New=%v, want only New", old, fresh)
 	}
 }
 

@@ -105,7 +105,8 @@ func Stamp(c *moodle.Client, forumInstanceID int) (mtime int64, count int64, err
 }
 
 // Export writes a forum into dir as markdown threads + attachments.
-func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode fsname.Mode) (int, error) {
+// With skipLocked, discussions Moodle marks as locked are left out entirely.
+func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode fsname.Mode, skipLocked bool) (int, error) {
 	params := url.Values{"forumid": {fmt.Sprintf("%d", forumInstanceID)}}
 	var disc DiscussionsResponse
 	if err := c.Call("mod_forum_get_forum_discussions", params, &disc); err != nil {
@@ -117,6 +118,9 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 
 	written := 0
 	for _, d := range disc.Discussions {
+		if skipLocked && d.Locked {
+			continue
+		}
 		did := d.Discussion
 		if did == 0 {
 			did = d.ID

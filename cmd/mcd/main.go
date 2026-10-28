@@ -230,6 +230,7 @@ func runDownload(args []string) int {
 	id := fs.Int("id", 0, "course id (legacy)")
 	courseURL := fs.String("url", "", "course URL (legacy)")
 	out, mode, fname, conc, force := dlFlags(fs)
+	skipLocked := fs.Bool("skip-locked", false, "leave out forum discussions marked Gesperrt (locked)")
 	ref, rest := peelCourse(args)
 	_ = fs.Parse(rest)
 	if ref == "" && fs.NArg() > 0 {
@@ -250,7 +251,7 @@ func runDownload(args []string) int {
 	fmt.Fprintf(os.Stderr, "Downloading %s …\n", ref)
 	res, err := a.Download(app.DownloadOpts{
 		Course: ref, OutDir: *out, Mode: *mode, FilenameMode: *fname,
-		Concurrency: *conc, Force: *force,
+		Concurrency: *conc, Force: *force, SkipLocked: *skipLocked,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -266,6 +267,7 @@ func runSync(args []string) int {
 	file := fs.String("file", "", "JSON file with course list")
 	interval := fs.String("interval", "0", "repeat interval")
 	out, mode, fname, conc, force := dlFlags(fs)
+	skipLocked := fs.Bool("skip-locked", false, "leave out forum discussions marked Gesperrt (locked)")
 	ref, rest := peelCourse(args)
 	_ = fs.Parse(rest)
 	if ref == "" && fs.NArg() > 0 {
@@ -326,7 +328,7 @@ func runSync(args []string) int {
 	for {
 		results, err := a.SyncOnce(app.SyncOpts{
 			Items: items, OutDir: *out, Mode: *mode, FilenameMode: *fname,
-			Concurrency: *conc, Force: *force,
+			Concurrency: *conc, Force: *force, SkipLocked: *skipLocked,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
