@@ -67,8 +67,10 @@ func fakeApp(t *testing.T) *app.App {
 			}
 		case "core_course_get_enrolled_courses_by_timeline_classification":
 			out = map[string]any{"courses": []any{map[string]any{"id": 4, "fullname": "Course 04", "shortname": "c04"}}}
+		case "mod_label_get_labels_by_courses":
+			out = map[string]any{"labels": []any{}}
 		case "mod_page_get_pages_by_courses":
-			out = map[string]any{"pages": []any{map[string]any{"coursemodule": 3, "intro": "", "content": "<p>Read chapter 1</p>"}}}
+			out = map[string]any{"pages": []any{map[string]any{"coursemodule": 3, "name": "Week 1", "intro": "", "content": "<p>Read chapter 1</p>"}}}
 		case "mod_assign_get_assignments":
 			out = map[string]any{"courses": []any{map[string]any{"id": 4, "assignments": []any{map[string]any{
 				"id": 50, "cmid": 5, "course": 4, "name": "Essay", "intro": "<p>Write 500 words</p>", "duedate": 1700000000,
@@ -330,18 +332,22 @@ func TestDownloadListsFilesWithStableIDsAndSkipsTooLarge(t *testing.T) {
 		t.Fatal(r.text)
 	}
 	files := r.structured["files"].([]any)
-	if len(files) != 3 {
+	if len(files) != 5 {
 		t.Fatalf("files = %v", files)
 	}
 	ids := map[string]bool{}
 	for _, f := range files {
 		ids[f.(map[string]any)["id"].(string)] = true
 	}
-	if !ids["2:notes.txt"] || !ids["4:a.txt"] || !ids["4:b.txt"] {
+	if !ids["2:notes.txt"] || !ids["4:a.txt"] || !ids["4:b.txt"] || !ids["3:Week 1.md"] || !ids["5:intro.md"] {
 		t.Errorf("ids = %v", ids)
 	}
 	if _, err := os.Stat(filepath.Join(r.structured["courseDir"].(string), "General", "Slides", "a.txt")); err != nil {
 		t.Errorf("folder file missing: %v", err)
+	}
+	page, err := os.ReadFile(filepath.Join(r.structured["courseDir"].(string), "General", "Week 1.md"))
+	if err != nil || string(page) != "# Week 1\n\n<p>Read chapter 1</p>\n" {
+		t.Errorf("resources-only must export pages as notes: %q %v", page, err)
 	}
 }
 

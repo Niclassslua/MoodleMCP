@@ -226,7 +226,7 @@ Layout:
   course.json
   course_state.json
   {section}/…
-  assigns/{assignment}/intro.html, intro/*, submission/*
+  assigns/{assignment}/intro.md, intro/*, submission/*
 ```
 
 ### Environment variables

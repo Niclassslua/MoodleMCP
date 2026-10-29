@@ -131,7 +131,7 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 
 	wantResources := opt.Mode == ModeAll || opt.Mode == ModeResourcesOnly
 	wantForums := opt.Mode == ModeAll || opt.Mode == ModeForumsOnly
-	wantRich := opt.Mode == ModeAll // labels/pages/assigns with "all"
+	wantRich := wantResources // labels/pages/assigns are course content, not forums
 
 	cmDirty := func(cmid int) bool {
 		if dirtyAll || opt.Force {
@@ -250,13 +250,17 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 		}
 	}
 
+	var notes []FileInfo
 	if wantRich {
-		if _, err := exportLabelsPages(c, opt, courseDir, &downloaded, &skipped); err != nil {
+		lp, err := exportLabelsPages(c, opt, courseDir, &downloaded, &skipped)
+		if err != nil {
 			return Result{}, err
 		}
-		if err := exportAssignsInner(c, opt, courseDir, &downloaded, &skipped); err != nil {
+		as, err := exportAssignsInner(c, opt, courseDir, &downloaded, &skipped)
+		if err != nil {
 			return Result{}, err
 		}
+		notes = append(lp, as...)
 	}
 
 	sem := make(chan struct{}, opt.Concurrency)
@@ -313,7 +317,7 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 
 	files := []FileInfo{}
 	if wantResources {
-		files = collectFiles(sections, opt.FilenameMode, opt.MaxBytes)
+		files = sortFiles(append(collectFiles(sections, opt.FilenameMode, opt.MaxBytes), notes...))
 		if err := writeSectionIndexes(courseDir, sections, files, opt.FilenameMode); err != nil {
 			return Result{}, err
 		}
@@ -346,104 +350,136 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 	}, nil
 }
 
-func exportLabelsPages(c *moodle.Client, opt Options, courseDir string, downloaded, skipped *atomic.Int64) (int, error) {
+// noteMarkdown wraps Moodle HTML in a Markdown note. Lines are trimmed and blank
+// lines dropped so Markdown readers (Obsidian) keep it one raw HTML block instead
+// of turning indented lines into code blocks.
+// ponytail: whitespace inside <pre> is lost; convert HTML to Markdown if that matters.
+func noteMarkdown(title, html string) []byte {
+	var b strings.Builder
+	b.WriteString("# " + title + "\n\n")
+	for _, ln := range strings.Split(strings.ReplaceAll(html, "\r", ""), "\n") {
+		if ln = strings.TrimSpace(ln); ln != "" {
+			b.WriteString(ln + "\n")
+		}
+	}
+	return []byte(b.String())
+}
+
+// noteInfo lists a written (or unchanged) note like a resource file, so callers
+// see labels, pages and assignment intros in Result.Files.
+func noteInfo(courseDir, dest, id, section, name, url string, mtime, size int64) FileInfo {
+	rel, _ := filepath.Rel(courseDir, dest)
+	return FileInfo{
+		ID: id, Section: section, DisplayName: name, File: filepath.Base(dest),
+		Path: filepath.ToSlash(rel), Modified: time.Unix(mtime, 0).Local().Format(time.RFC3339),
+		SizeBytes: size, URL: url, mtime: mtime,
+	}
+}
+
+func exportLabelsPages(c *moodle.Client, opt Options, courseDir string, downloaded, skipped *atomic.Int64) ([]FileInfo, error) {
 	sections, err := c.CourseContents(opt.CourseID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	// map cmid → section dir
+	// map cmid → section dir, name and link
 	secByCM := map[int]string{}
+	secNameByCM := map[int]string{}
+	urlByCM := map[int]string{}
 	for _, sec := range sections {
 		secName := sec.Name
 		if secName == "" {
 			secName = "section"
 		}
-		secDir := filepath.Join(courseDir, fsname.Sanitize(secName, opt.FilenameMode))
+		secDir := filepath.Join(courseDir, sectionDirName(sec, opt.FilenameMode))
 		for _, m := range sec.Modules {
 			secByCM[m.ID] = secDir
+			secNameByCM[m.ID] = secName
+			urlByCM[m.ID] = m.URL
 		}
+	}
+	var infos []FileInfo
+	// write saves one note unless the state says it is unchanged; it is listed either way
+	write := func(cmid int, key, fallbackDir, name, html string, mtime int64) error {
+		secDir := secByCM[cmid]
+		section := secNameByCM[cmid]
+		if secDir == "" {
+			secDir = filepath.Join(courseDir, fallbackDir)
+			section = fallbackDir
+		}
+		url := urlByCM[cmid]
+		if url == "" { // labels have no view page
+			url = fmt.Sprintf("%s/course/view.php?id=%d#module-%d", c.Base, opt.CourseID, cmid)
+		}
+		dest := filepath.Join(secDir, fsname.Sanitize(name, opt.FilenameMode)+".md")
+		body := noteMarkdown(name, html)
+		size := int64(len(body))
+		infos = append(infos, noteInfo(courseDir, dest, fmt.Sprintf("%d:%s", cmid, filepath.Base(dest)), section, name, url, mtime, size))
+		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, mtime, size) {
+			skipped.Add(1)
+			return nil
+		}
+		if err := os.MkdirAll(secDir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dest, body, 0o644); err != nil {
+			return err
+		}
+		downloaded.Add(1)
+		if opt.State != nil {
+			opt.State.Set(key, mtime, size, dest)
+		}
+		return nil
 	}
 
 	labels, err := c.Labels(opt.CourseID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	for _, lb := range labels {
-		secDir := secByCM[lb.CMID]
-		if secDir == "" {
-			secDir = filepath.Join(courseDir, "labels")
-		}
-		key := fmt.Sprintf("label:%d", lb.ID)
-		size := int64(len(lb.Intro))
-		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, 0, size) {
-			skipped.Add(1)
-			continue
-		}
-		if err := os.MkdirAll(secDir, 0o755); err != nil {
-			return 0, err
-		}
-		dest := filepath.Join(secDir, fsname.Sanitize(lb.Name, opt.FilenameMode)+".html")
-		html := "<!DOCTYPE html><meta charset=\"utf-8\"><title>" + lb.Name + "</title>\n" + lb.Intro
-		if err := os.WriteFile(dest, []byte(html), 0o644); err != nil {
-			return 0, err
-		}
-		downloaded.Add(1)
-		if opt.State != nil {
-			opt.State.Set(key, 0, size, dest)
+		if err := write(lb.CMID, fmt.Sprintf("label:%d", lb.ID), "labels", lb.Name, lb.Intro, lb.TimeModified); err != nil {
+			return nil, err
 		}
 	}
 
 	pages, err := c.Pages(opt.CourseID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	for _, p := range pages {
-		secDir := secByCM[p.CMID]
-		if secDir == "" {
-			secDir = filepath.Join(courseDir, "pages")
-		}
 		body := p.Content
 		if body == "" {
 			body = p.Intro
 		}
-		key := fmt.Sprintf("page:%d", p.ID)
-		size := int64(len(body))
-		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, 0, size) {
-			skipped.Add(1)
-			continue
-		}
-		if err := os.MkdirAll(secDir, 0o755); err != nil {
-			return 0, err
-		}
-		dest := filepath.Join(secDir, fsname.Sanitize(p.Name, opt.FilenameMode)+".html")
-		html := "<!DOCTYPE html><meta charset=\"utf-8\"><title>" + p.Name + "</title>\n" + body
-		if err := os.WriteFile(dest, []byte(html), 0o644); err != nil {
-			return 0, err
-		}
-		downloaded.Add(1)
-		if opt.State != nil {
-			opt.State.Set(key, 0, size, dest)
+		if err := write(p.CMID, fmt.Sprintf("page:%d", p.ID), "pages", p.Name, body, p.TimeModified); err != nil {
+			return nil, err
 		}
 	}
-	return 0, nil
+	return infos, nil
 }
 
-func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloaded, skipped *atomic.Int64) error {
+func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloaded, skipped *atomic.Int64) ([]FileInfo, error) {
 	assigns, err := c.Assignments(opt.CourseID)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var infos []FileInfo
 	base := filepath.Join(courseDir, "assigns")
 	for _, a := range assigns {
 		dir := filepath.Join(base, fsname.Sanitize(a.Name, opt.FilenameMode))
 		key := fmt.Sprintf("assign:%d", a.ID)
 		intro := a.Intro
-		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, a.DueDate, int64(len(intro))) {
+		var note []byte
+		if intro != "" {
+			note = noteMarkdown(a.Name, intro)
+			url := fmt.Sprintf("%s/mod/assign/view.php?id=%d", c.Base, a.CMID)
+			infos = append(infos, noteInfo(courseDir, filepath.Join(dir, "intro.md"), fmt.Sprintf("%d:intro.md", a.CMID), "assigns", a.Name, url, a.TimeModified, int64(len(note))))
+		}
+		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, a.TimeModified, int64(len(intro))) {
 			skipped.Add(1)
 			continue
 		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+			return nil, err
 		}
 		meta := map[string]any{
 			"id": a.ID, "name": a.Name, "duedate": a.DueDate,
@@ -451,9 +487,8 @@ func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloa
 		}
 		mb, _ := json.MarshalIndent(meta, "", "  ")
 		_ = os.WriteFile(filepath.Join(dir, "assign.json"), mb, 0o644)
-		if intro != "" {
-			html := "<!DOCTYPE html><meta charset=\"utf-8\"><title>" + a.Name + "</title>\n" + intro
-			_ = os.WriteFile(filepath.Join(dir, "intro.html"), []byte(html), 0o644)
+		if note != nil {
+			_ = os.WriteFile(filepath.Join(dir, "intro.md"), note, 0o644)
 			downloaded.Add(1)
 		}
 		files := a.IntroAttachments
@@ -466,10 +501,10 @@ func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloa
 			}
 			dest := filepath.Join(dir, "intro", fsname.Sanitize(f.Filename, opt.FilenameMode))
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-				return err
+				return nil, err
 			}
 			if err := saveURL(c, f.FileURL, dest); err != nil {
-				return err
+				return nil, err
 			}
 			downloaded.Add(1)
 		}
@@ -485,7 +520,7 @@ func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloa
 						}
 						dest := filepath.Join(subDir, fsname.Sanitize(f.Filename, opt.FilenameMode))
 						if err := saveURL(c, f.FileURL, dest); err != nil {
-							return err
+							return nil, err
 						}
 						downloaded.Add(1)
 					}
@@ -493,10 +528,10 @@ func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloa
 			}
 		}
 		if opt.State != nil {
-			opt.State.Set(key, a.DueDate, int64(len(intro)), dir)
+			opt.State.Set(key, a.TimeModified, int64(len(intro)), dir)
 		}
 	}
-	return nil
+	return infos, nil
 }
 
 func saveURL(c *moodle.Client, fileURL, dest string) error {

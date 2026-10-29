@@ -90,6 +90,11 @@ func collectFiles(sections []moodle.Section, mode fsname.Mode, maxBytes int64) [
 			}
 		}
 	}
+	return sortFiles(files)
+}
+
+// sortFiles orders files oldest first, then by display name.
+func sortFiles(files []FileInfo) []FileInfo {
 	sort.SliceStable(files, func(i, j int) bool {
 		if files[i].mtime != files[j].mtime {
 			return files[i].mtime < files[j].mtime

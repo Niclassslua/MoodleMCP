@@ -163,11 +163,12 @@ func (c *Client) UpdatesSince(courseID int, since int64) ([]UpdateInstance, erro
 }
 
 type Label struct {
-	ID     int    `json:"id"`
-	Course int    `json:"course"`
-	Name   string `json:"name"`
-	Intro  string `json:"intro"`
-	CMID   int    `json:"coursemodule"`
+	ID           int    `json:"id"`
+	Course       int    `json:"course"`
+	Name         string `json:"name"`
+	Intro        string `json:"intro"`
+	CMID         int    `json:"coursemodule"`
+	TimeModified int64  `json:"timemodified"`
 }
 
 type labelsResp struct {
@@ -183,12 +184,13 @@ func (c *Client) Labels(courseID int) ([]Label, error) {
 }
 
 type Page struct {
-	ID      int    `json:"id"`
-	Course  int    `json:"course"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	Intro   string `json:"intro"`
-	CMID    int    `json:"coursemodule"`
+	ID           int    `json:"id"`
+	Course       int    `json:"course"`
+	Name         string `json:"name"`
+	Content      string `json:"content"`
+	Intro        string `json:"intro"`
+	CMID         int    `json:"coursemodule"`
+	TimeModified int64  `json:"timemodified"`
 }
 
 type pagesResp struct {
@@ -222,6 +224,7 @@ type Assignment struct {
 	CutoffDate               int64        `json:"cutoffdate"`
 	IntroAttachments         []AssignFile `json:"introattachments"`
 	IntroFiles               []AssignFile `json:"introfiles"`
+	TimeModified             int64        `json:"timemodified"`
 }
 
 type assignCourse struct {
