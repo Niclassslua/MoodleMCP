@@ -70,7 +70,7 @@ func fakeApp(t *testing.T) *app.App {
 		case "mod_label_get_labels_by_courses":
 			out = map[string]any{"labels": []any{}}
 		case "mod_page_get_pages_by_courses":
-			out = map[string]any{"pages": []any{map[string]any{"coursemodule": 3, "name": "Week 1", "intro": "", "content": "<p>Read chapter 1</p>"}}}
+			out = map[string]any{"pages": []any{map[string]any{"coursemodule": 3, "name": "Week 1", "intro": "", "content": "<p>Read chapter 1</p><img class=\"x\" src=\"" + site + "/webservice/pluginfile.php/42/mod_page/content/3/Bild%201.png\">"}}}
 		case "mod_assign_get_assignments":
 			out = map[string]any{"courses": []any{map[string]any{"id": 4, "assignments": []any{map[string]any{
 				"id": 50, "cmid": 5, "course": 4, "name": "Essay", "intro": "<p>Write 500 words</p>", "duedate": 1700000000,
@@ -346,8 +346,11 @@ func TestDownloadListsFilesWithStableIDsAndSkipsTooLarge(t *testing.T) {
 		t.Errorf("folder file missing: %v", err)
 	}
 	page, err := os.ReadFile(filepath.Join(r.structured["courseDir"].(string), "General", "Week 1.md"))
-	if err != nil || string(page) != "# Week 1\n\n<p>Read chapter 1</p>\n" {
-		t.Errorf("resources-only must export pages as notes: %q %v", page, err)
+	if err != nil || string(page) != "# Week 1\n\n<p>Read chapter 1</p><img class=\"x\" src=\"../media/42-Bild%201.png\">\n" {
+		t.Errorf("resources-only must export pages as notes with local images: %q %v", page, err)
+	}
+	if _, err := os.Stat(filepath.Join(r.structured["courseDir"].(string), "media", "42-Bild 1.png")); err != nil {
+		t.Errorf("page image not downloaded: %v", err)
 	}
 }
 

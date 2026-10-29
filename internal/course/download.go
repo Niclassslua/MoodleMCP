@@ -1,10 +1,13 @@
 package course
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -256,7 +259,7 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		as, err := exportAssignsInner(c, opt, courseDir, &downloaded, &skipped)
+		as, err := exportAssignsInner(c, opt, courseDir, sections, &downloaded, &skipped)
 		if err != nil {
 			return Result{}, err
 		}
@@ -365,6 +368,42 @@ func noteMarkdown(title, html string) []byte {
 	return []byte(b.String())
 }
 
+var moodleImg = regexp.MustCompile(`(<img\b[^>]*?\bsrc=")([^"]*/pluginfile\.php/[^"]*)(")`)
+
+// localizeImages downloads the Moodle images of a note into mediaDir and points
+// their src there, relative to noteDir: Moodle only serves them with a token.
+// An image that fails to download keeps its Moodle link.
+func localizeImages(c *moodle.Client, html, noteDir, mediaDir string, mode fsname.Mode) string {
+	return moodleImg.ReplaceAllStringFunc(html, func(tag string) string {
+		m := moodleImg.FindStringSubmatch(tag)
+		u, err := url.Parse(strings.ReplaceAll(m[2], "&amp;", "&"))
+		if err != nil {
+			return tag
+		}
+		// path after pluginfile.php: <contextid>/<component>/<area>/[<itemid>/]<filename>
+		rest := strings.Split(u.Path[strings.LastIndex(u.Path, "/pluginfile.php/")+len("/pluginfile.php/"):], "/")
+		name, err := url.PathUnescape(rest[len(rest)-1])
+		if err != nil || name == "" {
+			return tag
+		}
+		dest := filepath.Join(mediaDir, rest[0]+"-"+fsname.Sanitize(name, mode))
+		if _, err := os.Stat(dest); err != nil {
+			if err := os.MkdirAll(mediaDir, 0o755); err != nil {
+				return tag
+			}
+			if err := saveURL(c, u.String(), dest); err != nil {
+				_ = os.Remove(dest)
+				return tag
+			}
+		}
+		rel, err := filepath.Rel(noteDir, dest)
+		if err != nil {
+			return tag
+		}
+		return m[1] + (&url.URL{Path: filepath.ToSlash(rel)}).EscapedPath() + m[3]
+	})
+}
+
 // noteInfo lists a written (or unchanged) note like a resource file, so callers
 // see labels, pages and assignment intros in Result.Files.
 func noteInfo(courseDir, dest, id, section, name, url string, mtime, size int64) FileInfo {
@@ -411,7 +450,7 @@ func exportLabelsPages(c *moodle.Client, opt Options, courseDir string, download
 			url = fmt.Sprintf("%s/course/view.php?id=%d#module-%d", c.Base, opt.CourseID, cmid)
 		}
 		dest := filepath.Join(secDir, fsname.Sanitize(name, opt.FilenameMode)+".md")
-		body := noteMarkdown(name, html)
+		body := noteMarkdown(name, localizeImages(c, html, secDir, filepath.Join(courseDir, "media"), opt.FilenameMode))
 		size := int64(len(body))
 		infos = append(infos, noteInfo(courseDir, dest, fmt.Sprintf("%d:%s", cmid, filepath.Base(dest)), section, name, url, mtime, size))
 		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, mtime, size) {
@@ -457,10 +496,18 @@ func exportLabelsPages(c *moodle.Client, opt Options, courseDir string, download
 	return infos, nil
 }
 
-func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloaded, skipped *atomic.Int64) ([]FileInfo, error) {
+func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, sections []moodle.Section, downloaded, skipped *atomic.Int64) ([]FileInfo, error) {
 	assigns, err := c.Assignments(opt.CourseID)
 	if err != nil {
 		return nil, err
+	}
+	// intros are listed under the assignment's Moodle section so readers can group
+	// them with the labels and pages around it
+	secNameByCM := map[int]string{}
+	for _, sec := range sections {
+		for _, m := range sec.Modules {
+			secNameByCM[m.ID] = cmp.Or(sec.Name, "section")
+		}
 	}
 	var infos []FileInfo
 	base := filepath.Join(courseDir, "assigns")
@@ -470,9 +517,9 @@ func exportAssignsInner(c *moodle.Client, opt Options, courseDir string, downloa
 		intro := a.Intro
 		var note []byte
 		if intro != "" {
-			note = noteMarkdown(a.Name, intro)
+			note = noteMarkdown(a.Name, localizeImages(c, intro, dir, filepath.Join(courseDir, "media"), opt.FilenameMode))
 			url := fmt.Sprintf("%s/mod/assign/view.php?id=%d", c.Base, a.CMID)
-			infos = append(infos, noteInfo(courseDir, filepath.Join(dir, "intro.md"), fmt.Sprintf("%d:intro.md", a.CMID), "assigns", a.Name, url, a.TimeModified, int64(len(note))))
+			infos = append(infos, noteInfo(courseDir, filepath.Join(dir, "intro.md"), fmt.Sprintf("%d:intro.md", a.CMID), cmp.Or(secNameByCM[a.CMID], "assigns"), a.Name, url, a.TimeModified, int64(len(note))))
 		}
 		if opt.SkipExisting && opt.State != nil && opt.State.Unchanged(key, a.TimeModified, int64(len(intro))) {
 			skipped.Add(1)
