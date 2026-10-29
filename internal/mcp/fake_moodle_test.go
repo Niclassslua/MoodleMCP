@@ -280,8 +280,9 @@ func TestForumDiscussionsAndPosts(t *testing.T) {
 	if got := hits[1].(map[string]any)["discussion"]; got != "Old & Gone" {
 		t.Errorf("discussion name = %q, want HTML entities decoded", got)
 	}
-	if got := hits[1].(map[string]any)["snippet"]; got != "first" {
-		t.Errorf("snippet = %q, want the opening post", got)
+	res, err := fakeApp(t).SearchForums("c04", "")
+	if err != nil || len(res.Hits) != 2 || res.Hits[1].Snippet != "first" {
+		t.Errorf("snippet = %+v (%v), want the opening post", res.Hits, err)
 	}
 	var texts []string
 	for offset := 0; ; offset += 2 {
