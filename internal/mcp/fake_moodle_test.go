@@ -99,7 +99,7 @@ func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
 			out = map[string]any{"discussions": []any{}}
 			if q.Get("forumid") == "9" {
 				out = map[string]any{"discussions": []any{
-					map[string]any{"id": 1, "discussion": 100, "name": "Old", "userfullname": "Prof", "created": 1700000000, "timemodified": 1700000000, "numreplies": 2, "locked": true},
+					map[string]any{"id": 1, "discussion": 100, "name": "Old &amp; Gone", "userfullname": "Prof", "created": 1700000000, "timemodified": 1700000000, "numreplies": 2, "locked": true},
 					map[string]any{"id": 2, "discussion": 200, "name": "New", "userfullname": "Prof", "created": 1700090000, "timemodified": 1700090000},
 				}}
 			}
@@ -270,6 +270,9 @@ func TestForumDiscussionsAndPosts(t *testing.T) {
 	if len(hits) != 2 || first["discussion"] != "New" || first["author"] != "Prof" || first["created"] == "" {
 		t.Fatalf("hits = %v", hits)
 	}
+	if got := hits[1].(map[string]any)["discussion"]; got != "Old & Gone" {
+		t.Errorf("discussion name = %q, want HTML entities decoded", got)
+	}
 	var texts []string
 	for offset := 0; ; offset += 2 {
 		r := call(t, cs, "get_discussion", map[string]any{"discussion_id": 100, "offset": offset, "limit": 2})
@@ -297,7 +300,7 @@ func TestDownloadSkipLockedLeavesOutLockedDiscussions(t *testing.T) {
 			t.Fatal(r.text)
 		}
 		forumDir := filepath.Join(r.structured["courseDir"].(string), "General", "News")
-		_, errOld := os.Stat(filepath.Join(forumDir, "Old"))
+		_, errOld := os.Stat(filepath.Join(forumDir, "Old & Gone"))
 		_, errNew := os.Stat(filepath.Join(forumDir, "New", "New.md"))
 		return errOld == nil, errNew == nil
 	}

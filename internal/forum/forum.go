@@ -51,6 +51,11 @@ func ListDiscussions(c *moodle.Client, forumInstanceID int) ([]Discussion, error
 	if err := c.Call("mod_forum_get_forum_discussions", params, &disc); err != nil {
 		return nil, err
 	}
+	// Moodle returns names and subjects HTML-escaped ("&amp;")
+	for i := range disc.Discussions {
+		disc.Discussions[i].Name = html.UnescapeString(disc.Discussions[i].Name)
+		disc.Discussions[i].Subject = html.UnescapeString(disc.Discussions[i].Subject)
+	}
 	return disc.Discussions, nil
 }
 
@@ -59,6 +64,9 @@ func ListPosts(c *moodle.Client, discussionID int) ([]Post, error) {
 	var posts PostsResponse
 	if err := c.Call("mod_forum_get_discussion_posts", pq, &posts); err != nil {
 		return nil, err
+	}
+	for i := range posts.Posts {
+		posts.Posts[i].Subject = html.UnescapeString(posts.Posts[i].Subject)
 	}
 	return posts.Posts, nil
 }
@@ -107,9 +115,8 @@ func Stamp(c *moodle.Client, forumInstanceID int) (mtime int64, count int64, err
 // Export writes a forum into dir as markdown threads + attachments.
 // With skipLocked, discussions Moodle marks as locked are left out entirely.
 func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode fsname.Mode, skipLocked bool) (int, error) {
-	params := url.Values{"forumid": {fmt.Sprintf("%d", forumInstanceID)}}
-	var disc DiscussionsResponse
-	if err := c.Call("mod_forum_get_forum_discussions", params, &disc); err != nil {
+	discussions, err := ListDiscussions(c, forumInstanceID)
+	if err != nil {
 		return 0, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -117,7 +124,7 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 	}
 
 	written := 0
-	for _, d := range disc.Discussions {
+	for _, d := range discussions {
 		if skipLocked && d.Locked {
 			continue
 		}
@@ -134,9 +141,8 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 			return written, err
 		}
 
-		var posts PostsResponse
-		pq := url.Values{"discussionid": {fmt.Sprintf("%d", did)}}
-		if err := c.Call("mod_forum_get_discussion_posts", pq, &posts); err != nil {
+		posts, err := ListPosts(c, did)
+		if err != nil {
 			return written, fmt.Errorf("discussion %d: %w", did, err)
 		}
 
@@ -157,7 +163,7 @@ func Export(c *moodle.Client, forumInstanceID int, forumName, dir string, mode f
 		b.WriteString(fmt.Sprintf("- Anhang: %s\n", yesNo(d.Attachment)))
 		b.WriteString(fmt.Sprintf("- Markiert: %s\n", yesNo(d.Starred)))
 		b.WriteString(fmt.Sprintf("- Antworten erlaubt: %s, Sperren erlaubt: %s\n\n", yesNo(d.CanReply), yesNo(d.CanLock)))
-		for _, p := range posts.Posts {
+		for _, p := range posts {
 			author := p.Author.Name
 			if author == "" {
 				author = "unknown"
