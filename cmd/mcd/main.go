@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,11 +10,15 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/Niclassslua/MoodleMCP/internal/app"
+	"github.com/Niclassslua/MoodleMCP/internal/config"
 	mcpserver "github.com/Niclassslua/MoodleMCP/internal/mcp"
+	"github.com/Niclassslua/MoodleMCP/internal/moodle"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -38,6 +43,15 @@ func main() {
 		os.Exit(runSync(args))
 	case "forums":
 		os.Exit(runForums(args))
+	case "discussion":
+		os.Exit(runDiscussion(args))
+	case "login":
+		os.Exit(runLogin(args))
+	case "logout":
+		if err := config.Logout(); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 	case "messages":
 		os.Exit(runMessages(args))
 	case "doctor":
@@ -59,13 +73,16 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `mcd — Moodle Course Downloader (Web Services CLI + MCP)
 
 Usage:
-  mcd list [--json=false]
+  mcd login --url URL --username USER   (password from stdin or prompt)
+  mcd logout
+  mcd list [--filter all|inprogress|past|future] [--json=false]
   mcd inspect COURSE [--json]
   mcd due [--days 14] [COURSE] [--json]
   mcd grades COURSE [--json]
   mcd download COURSE [options]
   mcd sync COURSE | --file courses.json [options]
   mcd forums COURSE [query] [--json]
+  mcd discussion ID [--json]
   mcd messages [query] [--json] [--export] [--out DIR]
   mcd doctor [--json]
   mcd mcp serve
@@ -79,8 +96,13 @@ Download/sync options:
   --filename-mode MODE   utf8 | ascii
   --concurrency N        parallel downloads (default: 4)
   --force                re-download everything
+  --skip-locked          leave out locked forum discussions
+  --flat                 write into DIR itself, no course-name folder
+  --max-size MB          list but do not download larger files
+  --json                 print the result (incl. the course's file list) as JSON
   --interval DURATION    sync loop (e.g. 1h); 0 = once
 
+Flags go before COURSE. Credentials: mcd login, or
 Env: MOODLE_URL, MOODLE_USERNAME, MOODLE_PASSWORD
      MOODLE_TOKEN, MOODLE_SERVICE, MCD_FILENAME_MODE
 `)
@@ -104,9 +126,10 @@ func printJSON(v any) {
 func runList(args []string) int {
 	fs := flag.NewFlagSet("list", flag.ExitOnError)
 	asJSON := fs.Bool("json", true, "print JSON")
+	filter := fs.String("filter", "all", "all|inprogress|past|future")
 	_ = fs.Parse(args)
 	a := mustApp()
-	courses, err := a.ListCourses()
+	courses, err := a.CoursesFiltered(*filter)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
@@ -218,6 +241,20 @@ func dlFlags(fs *flag.FlagSet) (out, mode, fname *string, conc *int, force *bool
 	return
 }
 
+type syncFlags struct {
+	skipLocked, flat, asJSON *bool
+	maxMB                    *int
+}
+
+func addSyncFlags(fs *flag.FlagSet) syncFlags {
+	return syncFlags{
+		skipLocked: fs.Bool("skip-locked", false, "leave out forum discussions marked Gesperrt (locked)"),
+		flat:       fs.Bool("flat", false, "write into --out itself, no course-name folder"),
+		asJSON:     fs.Bool("json", false, "print the result as JSON on stdout"),
+		maxMB:      fs.Int("max-size", 0, "skip files larger than this many MB (0 = no limit)"),
+	}
+}
+
 func peelCourse(args []string) (ref string, rest []string) {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		return args[0], args[1:]
@@ -230,7 +267,7 @@ func runDownload(args []string) int {
 	id := fs.Int("id", 0, "course id (legacy)")
 	courseURL := fs.String("url", "", "course URL (legacy)")
 	out, mode, fname, conc, force := dlFlags(fs)
-	skipLocked := fs.Bool("skip-locked", false, "leave out forum discussions marked Gesperrt (locked)")
+	sf := addSyncFlags(fs)
 	ref, rest := peelCourse(args)
 	_ = fs.Parse(rest)
 	if ref == "" && fs.NArg() > 0 {
@@ -251,11 +288,15 @@ func runDownload(args []string) int {
 	fmt.Fprintf(os.Stderr, "Downloading %s …\n", ref)
 	res, err := a.Download(app.DownloadOpts{
 		Course: ref, OutDir: *out, Mode: *mode, FilenameMode: *fname,
-		Concurrency: *conc, Force: *force, SkipLocked: *skipLocked,
+		Concurrency: *conc, Force: *force, SkipLocked: *sf.skipLocked,
+		Flat: *sf.flat, MaxBytes: int64(*sf.maxMB) << 20,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1
+	}
+	if *sf.asJSON {
+		printJSON(res)
 	}
 	fmt.Fprintf(os.Stderr, "Done: %q — %d files, %d skipped → %s\n",
 		res.CourseName, res.Downloaded, res.Skipped, res.CourseDir)
@@ -267,7 +308,7 @@ func runSync(args []string) int {
 	file := fs.String("file", "", "JSON file with course list")
 	interval := fs.String("interval", "0", "repeat interval")
 	out, mode, fname, conc, force := dlFlags(fs)
-	skipLocked := fs.Bool("skip-locked", false, "leave out forum discussions marked Gesperrt (locked)")
+	sf := addSyncFlags(fs)
 	ref, rest := peelCourse(args)
 	_ = fs.Parse(rest)
 	if ref == "" && fs.NArg() > 0 {
@@ -328,11 +369,15 @@ func runSync(args []string) int {
 	for {
 		results, err := a.SyncOnce(app.SyncOpts{
 			Items: items, OutDir: *out, Mode: *mode, FilenameMode: *fname,
-			Concurrency: *conc, Force: *force, SkipLocked: *skipLocked,
+			Concurrency: *conc, Force: *force, SkipLocked: *sf.skipLocked,
+			Flat: *sf.flat, MaxBytes: int64(*sf.maxMB) << 20,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			return 1
+		}
+		if *sf.asJSON {
+			printJSON(map[string]any{"courses": results})
 		}
 		for _, res := range results {
 			fmt.Fprintf(os.Stderr, "  %q — %d new, %d skipped → %s\n",
@@ -371,6 +416,72 @@ func runForums(args []string) int {
 	for _, h := range res.Hits {
 		fmt.Printf("[%s] %s (%d posts)\n", h.Forum, h.Discussion, h.Posts)
 	}
+	return 0
+}
+
+func runDiscussion(args []string) int {
+	fs := flag.NewFlagSet("discussion", flag.ExitOnError)
+	asJSON := fs.Bool("json", true, "print JSON")
+	_ = fs.Parse(args)
+	id, err := strconv.Atoi(fs.Arg(0))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error: discussion ID required")
+		return 2
+	}
+	res, err := mustApp().DiscussionPosts(id, 0, 100)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if *asJSON {
+		printJSON(res)
+		return 0
+	}
+	for _, p := range res.Posts {
+		fmt.Printf("[%s] %s: %s\n%s\n\n", p.Time, p.Author, p.Subject, p.Text)
+	}
+	return 0
+}
+
+// runLogin fetches a token with the password once and keeps only the token (OS keychain).
+func runLogin(args []string) int {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	url := fs.String("url", "", "Moodle base URL, e.g. https://moodle.example.edu")
+	user := fs.String("username", "", "Moodle username")
+	_ = fs.Parse(args)
+	base := strings.TrimRight(strings.TrimSpace(*url), "/")
+	if base == "" || *user == "" {
+		fmt.Fprintln(os.Stderr, "error: --url and --username required")
+		return 2
+	}
+	var pass string
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprint(os.Stderr, "Password: ")
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		pass = string(b)
+	} else {
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		pass = strings.TrimRight(line, "\r\n")
+	}
+	if pass == "" {
+		fmt.Fprintln(os.Stderr, "error: empty password")
+		return 2
+	}
+	c, err := moodle.New(config.Config{BaseURL: base, Username: *user, Password: pass, Service: envOr("MOODLE_SERVICE", "moodle_mobile_app")})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	if err := config.SaveLogin(base, *user, c.Token); err != nil {
+		fmt.Fprintln(os.Stderr, "error: keychain:", err)
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "Logged in to %s as %s\n", base, *user)
 	return 0
 }
 

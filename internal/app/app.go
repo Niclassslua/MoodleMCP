@@ -383,6 +383,8 @@ type DownloadOpts struct {
 	SkipExisting bool
 	Force        bool
 	SkipLocked   bool
+	Flat         bool
+	MaxBytes     int64
 }
 
 func (a *App) Download(opt DownloadOpts) (course.Result, error) {
@@ -408,6 +410,8 @@ func (a *App) Download(opt DownloadOpts) (course.Result, error) {
 		SkipExisting: skip,
 		Force:        opt.Force,
 		SkipLocked:   opt.SkipLocked,
+		Flat:         opt.Flat,
+		MaxBytes:     opt.MaxBytes,
 	})
 }
 
@@ -425,6 +429,8 @@ type SyncOpts struct {
 	Concurrency  int
 	Force        bool
 	SkipLocked   bool
+	Flat         bool
+	MaxBytes     int64
 	Interval     time.Duration
 }
 
@@ -448,6 +454,8 @@ func (a *App) SyncOnce(opt SyncOpts) ([]course.Result, error) {
 			SkipExisting: true,
 			Force:        opt.Force,
 			SkipLocked:   opt.SkipLocked,
+			Flat:         opt.Flat,
+			MaxBytes:     opt.MaxBytes,
 		})
 		if err != nil {
 			return results, err

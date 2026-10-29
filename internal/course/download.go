@@ -32,15 +32,19 @@ type Options struct {
 	Concurrency  int
 	SkipExisting bool
 	Force        bool
-	SkipLocked   bool // leave out forum discussions Moodle marks as locked (Gesperrt)
+	SkipLocked   bool  // leave out forum discussions Moodle marks as locked (Gesperrt)
+	Flat         bool  // write into OutDir itself instead of OutDir/<course name>
+	MaxBytes     int64 // files larger than this are listed but not downloaded; 0 = no limit
 	State        *syncstate.State
 }
 
 type Result struct {
-	CourseName string `json:"courseName"`
-	Downloaded int    `json:"downloaded"`
-	Skipped    int    `json:"skipped"`
-	CourseDir  string `json:"courseDir"`
+	CourseID   int        `json:"courseId"`
+	CourseName string     `json:"courseName"`
+	Downloaded int        `json:"downloaded"`
+	Skipped    int        `json:"skipped"`
+	CourseDir  string     `json:"courseDir"`
+	Files      []FileInfo `json:"files"` // every file Moodle lists now, oldest first
 }
 
 func Download(c *moodle.Client, opt Options) (Result, error) {
@@ -80,6 +84,9 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 	}
 
 	courseDir := filepath.Join(opt.OutDir, fsname.Sanitize(courseName, opt.FilenameMode))
+	if opt.Flat {
+		courseDir = opt.OutDir
+	}
 	if err := os.MkdirAll(courseDir, 0o755); err != nil {
 		return Result{}, err
 	}
@@ -163,6 +170,10 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 				}
 				for _, ct := range mod.Contents {
 					if ct.Type != "file" || ct.FileURL == "" {
+						continue
+					}
+					if opt.MaxBytes > 0 && ct.Filesize > opt.MaxBytes {
+						skipped.Add(1)
 						continue
 					}
 					rel := strings.TrimPrefix(ct.Filepath, "/")
@@ -300,16 +311,11 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 		return Result{}, firstErr
 	}
 
+	files := []FileInfo{}
 	if wantResources {
-		for _, sec := range sections {
-			secName := sec.Name
-			if secName == "" {
-				secName = "section"
-			}
-			secDir := filepath.Join(courseDir, fsname.Sanitize(secName, opt.FilenameMode))
-			if err := writeSectionIndex(secDir, secName, sec.Modules, opt.FilenameMode); err != nil {
-				return Result{}, fmt.Errorf("index %q: %w", secName, err)
-			}
+		files = collectFiles(sections, opt.FilenameMode, opt.MaxBytes)
+		if err := writeSectionIndexes(courseDir, sections, files, opt.FilenameMode); err != nil {
+			return Result{}, err
 		}
 	}
 
@@ -331,10 +337,12 @@ func Download(c *moodle.Client, opt Options) (Result, error) {
 	}
 
 	return Result{
+		CourseID:   opt.CourseID,
 		CourseName: courseName,
 		Downloaded: int(downloaded.Load()),
 		Skipped:    int(skipped.Load()),
 		CourseDir:  courseDir,
+		Files:      files,
 	}, nil
 }
 

@@ -27,11 +27,14 @@ func Load() (Config, error) {
 	if c.Service == "" {
 		c.Service = "moodle_mobile_app"
 	}
+	if c.Token == "" && (c.Username == "" || c.Password == "") {
+		applySavedLogin(&c)
+	}
 	if c.BaseURL == "" {
-		return c, fmt.Errorf("MOODLE_URL is required")
+		return c, fmt.Errorf("MOODLE_URL is required (or run: mcd login)")
 	}
 	if c.Token == "" && (c.Username == "" || c.Password == "") {
-		return c, fmt.Errorf("set MOODLE_TOKEN or MOODLE_USERNAME + MOODLE_PASSWORD")
+		return c, fmt.Errorf("set MOODLE_TOKEN or MOODLE_USERNAME + MOODLE_PASSWORD, or run: mcd login")
 	}
 	return c, nil
 }

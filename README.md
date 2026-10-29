@@ -43,6 +43,8 @@ MOODLE_PASSWORD=your-password
 chmod 600 .env
 ```
 
+**Alternative without a `.env`:** `./bin/mcd login --url https://moodle.your-university.de --username your-username` asks for the password once, keeps only the token in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) and works from any directory. `./bin/mcd logout` removes it. Variables from the environment or a `.env` take precedence.
+
 ### 4. Check the connection
 
 ```bash
@@ -195,13 +197,18 @@ Remove the `mcd` entry from the Claude Desktop or Cursor config, then delete the
 ./bin/mcd download CEP --mode resources-only
 ./bin/mcd sync 5472 --out ./downloads          # skip unchanged
 ./bin/mcd sync --file courses.json --interval 1h
+./bin/mcd sync --json --flat --max-size 200 --out ./CEP 5472   # for scripts: file list as JSON
 ./bin/mcd forums 5472 Feedback
+./bin/mcd discussion 118636
+./bin/mcd list --filter past
 ./bin/mcd messages
 ./bin/mcd messages --export --out ./downloads Alice
 ./bin/mcd doctor
 ```
 
-`COURSE` may be numeric id, course URL, shortname, or a unique name substring.
+`COURSE` may be numeric id, course URL, shortname, or a unique name substring. Put flags before `COURSE`.
+
+`download`/`sync` also take `--skip-locked` (leave out locked forum discussions), `--flat` (write into `--out` itself), `--max-size MB` (list larger files but do not download them) and `--json` (print the result with every file's stable `id`, path, size and Moodle date). Each section folder gets an `INDEX.json` with the same file list.
 
 ### Download modes
 

@@ -309,6 +309,28 @@ func TestDownloadSkipLockedLeavesOutLockedDiscussions(t *testing.T) {
 	}
 }
 
+func TestDownloadListsFilesWithStableIDsAndSkipsTooLarge(t *testing.T) {
+	cs := fakeMoodle(t)
+	r := call(t, cs, "download_course", map[string]any{"course": "c04", "mode": "resources-only", "out": t.TempDir(), "max_size_mb": 1})
+	if r.isError {
+		t.Fatal(r.text)
+	}
+	files := r.structured["files"].([]any)
+	if len(files) != 3 {
+		t.Fatalf("files = %v", files)
+	}
+	ids := map[string]bool{}
+	for _, f := range files {
+		ids[f.(map[string]any)["id"].(string)] = true
+	}
+	if !ids["2:notes.txt"] || !ids["4:a.txt"] || !ids["4:b.txt"] {
+		t.Errorf("ids = %v", ids)
+	}
+	if _, err := os.Stat(filepath.Join(r.structured["courseDir"].(string), "General", "Slides", "a.txt")); err != nil {
+		t.Errorf("folder file missing: %v", err)
+	}
+}
+
 func TestParticipantsTeachersFirst(t *testing.T) {
 	cs := fakeMoodle(t)
 	r := call(t, cs, "list_participants", map[string]any{"course": "c04"})
