@@ -77,6 +77,7 @@ type PostsResponse struct {
 
 type Post struct {
 	ID          int       `json:"id"`
+	ParentID    int       `json:"parentid"`
 	Subject     string    `json:"subject"`
 	Message     string    `json:"message"`
 	Author      Author    `json:"author"`
@@ -87,6 +88,9 @@ type Post struct {
 
 type Author struct {
 	Name string `json:"fullname"`
+	URLs struct {
+		ProfileImage string `json:"profileimage"`
+	} `json:"urls"`
 }
 
 type FileRef struct {

@@ -2,8 +2,11 @@ package app
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"sort"
@@ -639,6 +642,11 @@ type ForumPost struct {
 	Text        string   `json:"text"`
 	Truncated   bool     `json:"truncated,omitempty"`
 	Attachments []string `json:"attachments,omitempty"`
+	// filled only by DiscussionThread, for UIs
+	ParentID    int    `json:"parentId,omitempty"`
+	Created     string `json:"created,omitempty"`     // RFC3339
+	HTML        string `json:"html,omitempty"`        // Moodle's message HTML, inline images as data URIs
+	AuthorImage string `json:"authorImage,omitempty"` // profile picture as data URI
 }
 
 func (a *App) discussionURL(id int) string {
@@ -657,6 +665,41 @@ type DiscussionPage struct {
 
 // DiscussionPosts returns one bounded, oldest-first page of a forum discussion.
 func (a *App) DiscussionPosts(id, offset, limit int) (DiscussionPage, error) {
+	return a.discussionPage(id, offset, limit, false)
+}
+
+// DiscussionThread returns the whole discussion with HTML, reply structure and
+// images inlined, so a UI can render it without the Moodle token.
+func (a *App) DiscussionThread(id int) (DiscussionPage, error) {
+	return a.discussionPage(id, 0, 1000, true)
+}
+
+// maxInlineImage caps each image embedded as a data URI.
+const maxInlineImage = 2 << 20
+
+func (a *App) dataURI(fileURL string) string {
+	var buf bytes.Buffer
+	n, err := a.Client.Download(fileURL, &limitWriter{w: &buf, left: maxInlineImage + 1})
+	if err != nil || n == 0 || buf.Len() > maxInlineImage {
+		return ""
+	}
+	return "data:" + http.DetectContentType(buf.Bytes()) + ";base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+type limitWriter struct {
+	w    io.Writer
+	left int
+}
+
+func (l *limitWriter) Write(p []byte) (int, error) {
+	if len(p) > l.left {
+		return 0, io.ErrShortWrite
+	}
+	l.left -= len(p)
+	return l.w.Write(p)
+}
+
+func (a *App) discussionPage(id, offset, limit int, rich bool) (DiscussionPage, error) {
 	if id <= 0 || offset < 0 || limit < 1 {
 		return DiscussionPage{}, fmt.Errorf("invalid input: discussion id must be positive, offset non-negative, and limit positive")
 	}
@@ -670,11 +713,31 @@ func (a *App) DiscussionPosts(id, offset, limit int) (DiscussionPage, error) {
 	if offset >= len(posts) {
 		return out, nil
 	}
+	avatars := map[string]string{}
 	for _, p := range posts[offset:end] {
 		text, truncated := previewText(forum.StripHTML(p.Message), 4000)
 		fp := ForumPost{ID: p.ID, Author: p.Author.Name, Time: localTime(p.TimeCreated), Subject: p.Subject, Text: text, Truncated: truncated}
 		for _, f := range p.Attachments {
 			fp.Attachments = append(fp.Attachments, f.Filename)
+		}
+		if rich {
+			fp.Text, fp.Truncated = forum.StripHTML(p.Message), false
+			fp.ParentID = p.ParentID
+			fp.Created = time.Unix(p.TimeCreated, 0).Format(time.RFC3339)
+			fp.HTML = p.Message
+			for _, f := range p.InlineFiles {
+				if f.FileURL != "" && strings.Contains(fp.HTML, f.FileURL) {
+					if d := a.dataURI(f.FileURL); d != "" {
+						fp.HTML = strings.ReplaceAll(fp.HTML, f.FileURL, d)
+					}
+				}
+			}
+			if img := p.Author.URLs.ProfileImage; img != "" {
+				if _, ok := avatars[img]; !ok {
+					avatars[img] = a.dataURI(img)
+				}
+				fp.AuthorImage = avatars[img]
+			}
 		}
 		out.Posts = append(out.Posts, fp)
 	}

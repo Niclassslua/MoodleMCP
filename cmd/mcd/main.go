@@ -18,7 +18,7 @@ import (
 	"github.com/Niclassslua/MoodleMCP/internal/moodle"
 )
 
-const version = "0.4.1"
+const version = "0.5.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -82,7 +82,7 @@ Usage:
   mcd download COURSE [options]
   mcd sync COURSE | --file courses.json [options]
   mcd forums COURSE [query] [--json]
-  mcd discussion ID [--json]
+  mcd discussion ID [--rich] [--json]
   mcd messages [query] [--json] [--export] [--out DIR]
   mcd doctor [--json]
   mcd mcp serve
@@ -422,13 +422,18 @@ func runForums(args []string) int {
 func runDiscussion(args []string) int {
 	fs := flag.NewFlagSet("discussion", flag.ExitOnError)
 	asJSON := fs.Bool("json", true, "print JSON")
+	rich := fs.Bool("rich", false, "whole thread with HTML, reply structure and images as data URIs")
 	_ = fs.Parse(args)
 	id, err := strconv.Atoi(fs.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: discussion ID required")
 		return 2
 	}
-	res, err := mustApp().DiscussionPosts(id, 0, 100)
+	a := mustApp()
+	res, err := a.DiscussionPosts(id, 0, 100)
+	if *rich {
+		res, err = a.DiscussionThread(id)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return 1

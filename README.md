@@ -200,6 +200,7 @@ Remove the `mcd` entry from the Claude Desktop or Cursor config, then delete the
 ./bin/mcd sync --json --flat --max-size 200 --out ./CEP 5472   # for scripts: file list as JSON
 ./bin/mcd forums 5472 Feedback
 ./bin/mcd discussion 118636
+./bin/mcd discussion --rich 118636     # whole thread with HTML, replies, avatars (for UIs)
 ./bin/mcd list --filter past
 ./bin/mcd messages
 ./bin/mcd messages --export --out ./downloads Alice

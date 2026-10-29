@@ -26,6 +26,11 @@ import (
 // conversation 5 with 30 messages, and in course 4 (the only current course)
 // a text resource, a page, a two-file folder, and assignment "Essay".
 func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
+	return connectClient(t, newServer("test", func() (*app.App, error) { return fakeApp(t), nil }))
+}
+
+// fakeApp is an App wired to the fake Moodle server.
+func fakeApp(t *testing.T) *app.App {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if strings.Contains(r.URL.Path, "pluginfile.php") {
@@ -110,7 +115,8 @@ func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
 			}
 			out = map[string]any{"posts": []any{ // Moodle returns newest first
 				map[string]any{"id": 3, "subject": "Re: Old", "message": "<p>third</p>", "timecreated": 1700000300, "author": map[string]any{"fullname": "C"}},
-				map[string]any{"id": 2, "subject": "Re: Old", "message": "second", "timecreated": 1700000200, "author": map[string]any{"fullname": "B"}},
+				map[string]any{"id": 2, "parentid": 1, "subject": "Re: Old", "message": "second", "timecreated": 1700000200,
+					"author": map[string]any{"fullname": "B", "urls": map[string]any{"profileimage": site + "/pluginfile.php/9/user/icon/f1"}}},
 				map[string]any{"id": 1, "subject": "Old", "message": "first", "timecreated": 1700000100, "author": map[string]any{"fullname": "Prof"},
 					"attachments": []any{map[string]any{"filename": "slides.pdf"}}},
 			}}
@@ -146,10 +152,11 @@ func fakeMoodle(t *testing.T) *mcpserver.ClientSession {
 		json.NewEncoder(w).Encode(out)
 	}))
 	t.Cleanup(ts.Close)
-	return connectClient(t, newServer("test", func() (*app.App, error) {
-		c, err := moodle.New(config.Config{BaseURL: ts.URL, Token: "tok"})
-		return &app.App{Client: c}, err
-	}))
+	c, err := moodle.New(config.Config{BaseURL: ts.URL, Token: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &app.App{Client: c}
 }
 
 type callResult struct {
@@ -331,6 +338,26 @@ func TestDownloadListsFilesWithStableIDsAndSkipsTooLarge(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(r.structured["courseDir"].(string), "General", "Slides", "a.txt")); err != nil {
 		t.Errorf("folder file missing: %v", err)
+	}
+}
+
+func TestDiscussionThreadInlinesHTMLRepliesAndAvatars(t *testing.T) {
+	page, err := fakeApp(t).DiscussionThread(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Posts) != 3 {
+		t.Fatalf("posts = %+v", page.Posts)
+	}
+	reply := page.Posts[1]
+	if reply.ParentID != 1 || reply.Created == "" || !strings.HasPrefix(reply.AuthorImage, "data:text/plain") {
+		t.Errorf("reply = %+v", reply)
+	}
+	if page.Posts[2].HTML != "<p>third</p>" || page.Posts[2].Text != "third" {
+		t.Errorf("html/text = %q / %q", page.Posts[2].HTML, page.Posts[2].Text)
+	}
+	if plain, _ := fakeApp(t).DiscussionPosts(100, 0, 10); plain.Posts[1].HTML != "" || plain.Posts[1].AuthorImage != "" {
+		t.Errorf("DiscussionPosts must stay lean for agents: %+v", plain.Posts[1])
 	}
 }
 
