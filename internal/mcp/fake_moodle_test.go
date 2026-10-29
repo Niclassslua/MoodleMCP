@@ -280,6 +280,9 @@ func TestForumDiscussionsAndPosts(t *testing.T) {
 	if got := hits[1].(map[string]any)["discussion"]; got != "Old & Gone" {
 		t.Errorf("discussion name = %q, want HTML entities decoded", got)
 	}
+	if got := hits[1].(map[string]any)["snippet"]; got != "first" {
+		t.Errorf("snippet = %q, want the opening post", got)
+	}
 	var texts []string
 	for offset := 0; ; offset += 2 {
 		r := call(t, cs, "get_discussion", map[string]any{"discussion_id": 100, "offset": offset, "limit": 2})

@@ -568,10 +568,14 @@ func (a *App) courseForumHits(co moodle.Course, q string, includePosts bool) ([]
 					posts, _ := forum.ListPosts(a.Client, d.DiscussionID())
 					hit.Posts = len(posts)
 					if len(posts) > 0 {
-						hit.Snippet = forum.StripHTML(posts[0].Message)
-						if len(hit.Snippet) > 160 {
-							hit.Snippet = hit.Snippet[:160] + "…"
+						// preview the opening post; Moodle lists newest first
+						first := posts[0]
+						for _, p := range posts {
+							if p.TimeCreated < first.TimeCreated {
+								first = p
+							}
 						}
+						hit.Snippet, _ = previewText(forum.StripHTML(first.Message), 160)
 					}
 				}
 				hits = append(hits, hit)
