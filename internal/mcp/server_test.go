@@ -136,7 +136,7 @@ func TestToolsPublishSchemasAndBehaviorHints(t *testing.T) {
 		}
 		byName[tool.Name] = *tool
 	}
-	for _, name := range []string{"list_courses", "inspect_course", "get_conversation", "export_messages"} {
+	for _, name := range []string{"list_courses", "inspect_course", "read_section", "get_conversation", "export_messages"} {
 		if _, ok := byName[name]; !ok {
 			t.Errorf("missing tool %q", name)
 		}

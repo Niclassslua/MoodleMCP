@@ -252,7 +252,8 @@ The server runs over stdio: `./bin/mcd mcp serve`. Setup is covered in [Installa
 | Tool | Purpose |
 |------|---------|
 | `list_courses` | Enrolled courses; `filter=inprogress` for the current semester |
-| `inspect_course` | Sections / module counts / files, with module IDs |
+| `inspect_course` | Sections with IDs, links and text previews; module counts / files, with module IDs |
+| `read_section` | Course-page section text, including schedules and tables, paged by characters |
 | `read_module` | Text of a page, label, or file (PDF, PPTX, DOCX, HTML, text), paged by characters |
 | `course_updates` | Recently changed activities in one or all current courses |
 | `list_due` | Upcoming deadlines with links and `moduleId`; `past_days` adds missed items still open |
@@ -272,13 +273,15 @@ The server runs over stdio: `./bin/mcd mcp serve`. Setup is covered in [Installa
 
 Results carry full web links: `doctor` returns `siteUrl`; courses, modules, forum discussions, and conversations have `url`; deadlines have `url` (activity page), `submitUrl` (direct submission page, when Moodle offers one), and `due` in local time.
 
-`course` accepts a course ID (as a number or string), URL, shortname, or a unique name substring. Tools that take an optional `course` (`search_forums`, `course_updates`) cover all current-semester courses when it is omitted. `read_module` returns up to `max_chars` characters (default 8,000) starting at `start`; continue with `start=nextStart` while `hasMore` is true.
+`course` accepts a course ID (as a number or string), URL, shortname, or a unique name substring. Tools that take an optional `course` (`search_forums`, `course_updates`) cover all current-semester courses when it is omitted. `read_module` and `read_section` return up to `max_chars` characters (default 8,000, maximum 20,000) starting at `start`; continue with `start=nextStart` while `hasMore` is true.
+
+`inspect_course` includes all course sections on every module page, even sections without modules. Each section has a text `summary` preview capped at 500 characters, with `summaryTruncated` when capped. For full course-page text (for example a schedule in the "General" section), call `read_section` with `course` and the section's `id` as `section_id`. This is a section ID, not a module ID or section number. Tables retain one line per row with cells separated by ` | `, including multiple paragraphs within a cell.
 
 List results accept `offset` and `limit`. The default page size is 20 and the maximum is 100. Continue while `page.hasMore` is true. Conversation and discussion detail return oldest-first entries. Individual message and post text is capped at 4,000 characters and marked with `truncated` when capped. Conversation previews are capped at 240 characters.
 
 Download, sync, and export tools write to `$MCD_OUT` (absolute path) or `~/Downloads/Moodle` by default; a relative `out` resolves under that directory, never the host's working directory. The server starts without contacting Moodle and logs in on the first tool call, so connection or login failures come back as tool errors (`doctor` reports them too).
 
-Errors come back as `isError` results prefixed with a category: `invalid input:`, `course not found:`, `ambiguous course:` (lists candidate IDs), `conversation not found:`, `discussion not found:`, `module not found:`, `unsupported file type:`, `Moodle error:`, `Moodle connection failed:`, or `Moodle connection or login failed:`.
+Errors come back as `isError` results prefixed with a category: `invalid input:`, `course not found:`, `ambiguous course:` (lists candidate IDs), `conversation not found:`, `discussion not found:`, `module not found:`, `section not found:`, `unsupported file type:`, `Moodle error:`, `Moodle connection failed:`, or `Moodle connection or login failed:`.
 
 MCP results include typed structured content plus serialized JSON text for client compatibility. Moodle-provided forum and message text should be treated as untrusted content.
 

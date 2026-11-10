@@ -143,7 +143,10 @@ type InspectModule struct {
 }
 
 type InspectSection struct {
+	ID      int             `json:"id"`
 	Name    string          `json:"name"`
+	URL     string          `json:"url"`
+	Summary string          `json:"summary,omitempty"`
 	Modules []InspectModule `json:"modules"`
 }
 
@@ -172,7 +175,7 @@ func (a *App) Inspect(ref string) (InspectResult, error) {
 		ModuleCounts: map[string]int{},
 	}
 	for _, sec := range sections {
-		is := InspectSection{Name: sec.Name}
+		is := InspectSection{ID: sec.ID, Name: sec.Name, URL: fmt.Sprintf("%s/course/section.php?id=%d", a.Client.Base, sec.ID), Summary: textx.HTMLText(sec.Summary)}
 		for _, m := range sec.Modules {
 			if m.UserVisible != nil && !*m.UserVisible {
 				continue
@@ -186,9 +189,7 @@ func (a *App) Inspect(ref string) (InspectResult, error) {
 				}
 			}
 		}
-		if len(is.Modules) > 0 {
-			out.Sections = append(out.Sections, is)
-		}
+		out.Sections = append(out.Sections, is)
 	}
 	return out, nil
 }
@@ -1090,6 +1091,49 @@ type ModuleText struct {
 	TotalChars int      `json:"totalChars"`
 	HasMore    bool     `json:"hasMore"`
 	NextStart  int      `json:"nextStart,omitempty"`
+}
+
+type SectionText struct {
+	SectionID  int    `json:"sectionId"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	Text       string `json:"text"`
+	Start      int    `json:"start"`
+	TotalChars int    `json:"totalChars"`
+	HasMore    bool   `json:"hasMore"`
+	NextStart  int    `json:"nextStart,omitempty"`
+}
+
+// ReadSection reads the course-page text, which is not a course module.
+func (a *App) ReadSection(ref string, sectionID, start, maxChars int) (SectionText, error) {
+	if sectionID <= 0 || start < 0 || maxChars < 1 || maxChars > 20000 {
+		return SectionText{}, fmt.Errorf("invalid input: section_id must be positive, start nonnegative, and max_chars between 1 and 20000")
+	}
+	co, err := a.ResolveCourse(ref)
+	if err != nil {
+		return SectionText{}, err
+	}
+	sections, err := a.Client.CourseContents(co.ID)
+	if err != nil {
+		return SectionText{}, err
+	}
+	for _, sec := range sections {
+		if sec.ID != sectionID {
+			continue
+		}
+		runes := []rune(textx.HTMLText(sec.Summary))
+		out := SectionText{SectionID: sec.ID, Name: sec.Name, URL: fmt.Sprintf("%s/course/section.php?id=%d", a.Client.Base, sec.ID), Start: start, TotalChars: len(runes)}
+		if start < len(runes) {
+			end := start + min(maxChars, len(runes)-start)
+			out.Text = string(runes[start:end])
+			out.HasMore = end < len(runes)
+			if out.HasMore {
+				out.NextStart = end
+			}
+		}
+		return out, nil
+	}
+	return SectionText{}, fmt.Errorf("section not found: section %d is not in %s; use inspect_course to list section IDs", sectionID, co.FullName)
 }
 
 const maxReadBytes = 50 << 20

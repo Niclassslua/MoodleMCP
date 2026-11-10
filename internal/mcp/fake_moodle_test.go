@@ -63,7 +63,12 @@ func fakeApp(t *testing.T) *app.App {
 						map[string]any{"id": 4, "name": "Slides", "modname": "folder", "contents": []any{file("a.txt"), file("b.txt")}},
 						map[string]any{"id": 5, "name": "Essay", "modname": "assign"})
 				}
-				out = []any{map[string]any{"name": "General", "modules": modules}}
+				out = []any{map[string]any{"id": 10, "name": "General", "summary": "<p>Welcome</p>", "modules": modules}}
+				if forumID == 9 {
+					out = append(out.([]any),
+						map[string]any{"id": 11, "name": "Schedule", "summary": scheduleHTML, "modules": []any{}},
+						map[string]any{"id": 12, "name": "Empty", "summary": "", "modules": []any{}})
+				}
 			}
 		case "core_course_get_enrolled_courses_by_timeline_classification":
 			out = map[string]any{"courses": []any{map[string]any{"id": 4, "fullname": "Course 04", "shortname": "c04"}}}
@@ -416,6 +421,76 @@ func TestResultsCarryWebLinks(t *testing.T) {
 
 // notesText is long enough to need two read_module windows of 500 characters.
 var notesText = strings.Repeat("0123456789", 70)
+
+var scheduleHTML = `<table><tr><th>Datum</th><th>Thema</th></tr><tr><td>22.09.</td><td><p>Einführung</p><p>Sicherheitskultur &amp; Projektgruppen</p></td></tr><tr><td>12.01.</td><td>Finale Vorstellung Kampagnen (hybrid)</td></tr></table><p>` + strings.Repeat("Übung ", 100) + `</p>`
+
+var scheduleText = "Datum | Thema\n22.09. | Einführung Sicherheitskultur & Projektgruppen\n12.01. | Finale Vorstellung Kampagnen (hybrid)\n" + strings.TrimSpace(strings.Repeat("Übung ", 100))
+
+func TestInspectAndReadSection(t *testing.T) {
+	cs := fakeMoodle(t)
+	// Section discovery is independent of module pagination and includes sections
+	// with text but no modules, as well as entirely empty sections.
+	for _, offset := range []int{0, 4, 99} {
+		r := call(t, cs, "inspect_course", map[string]any{"course": "c04", "limit": 1, "offset": offset})
+		if r.isError {
+			t.Fatal(r.text)
+		}
+		sections := r.structured["sections"].([]any)
+		if len(sections) != 3 {
+			t.Fatalf("sections = %v", sections)
+		}
+		schedule := sections[1].(map[string]any)
+		if schedule["id"] != float64(11) || schedule["name"] != "Schedule" || !strings.HasSuffix(schedule["url"].(string), "/course/section.php?id=11") || schedule["summaryTruncated"] != true || schedule["summary"] != string([]rune(scheduleText)[:500]) {
+			t.Fatalf("schedule discovery = %v", schedule)
+		}
+		if r.structured["page"].(map[string]any)["total"] != float64(5) {
+			t.Fatalf("module count changed: %v", r.structured["page"])
+		}
+	}
+	var text string
+	for start := 0; ; {
+		r := call(t, cs, "read_section", map[string]any{"course": 4, "section_id": 11, "start": start, "max_chars": 500})
+		if r.isError {
+			t.Fatal(r.text)
+		}
+		if r.structured["start"] != float64(start) || r.structured["totalChars"] != float64(len([]rune(scheduleText))) {
+			t.Fatalf("text window = %v", r.structured)
+		}
+		text += r.structured["text"].(string)
+		if !r.structured["hasMore"].(bool) {
+			break
+		}
+		start = int(r.structured["nextStart"].(float64))
+	}
+	if text != scheduleText {
+		t.Errorf("schedule = %q, want %q", text, scheduleText)
+	}
+	r := call(t, cs, "read_section", map[string]any{"course": "c04", "section_id": 11})
+	if r.isError || r.structured["text"] != scheduleText || r.structured["hasMore"] != false {
+		t.Errorf("default window = %+v", r)
+	}
+	for _, args := range []map[string]any{
+		{"course": "c04", "section_id": 12},
+		{"course": "c04", "section_id": 11, "start": 10000},
+	} {
+		r := call(t, cs, "read_section", args)
+		if r.isError || r.structured["text"] != "" || r.structured["hasMore"] != false {
+			t.Errorf("empty window = %+v", r)
+		}
+	}
+	for _, args := range []map[string]any{
+		{"course": "c04", "section_id": 99},
+		{"course": "c02", "section_id": 11},
+		{"course": "c04", "section_id": 0},
+		{"course": "c04", "section_id": 11, "start": -1},
+		{"course": "c04", "section_id": 11, "max_chars": -1},
+		{"course": "c04", "section_id": 11, "max_chars": 20001},
+	} {
+		if r := call(t, cs, "read_section", args); !r.isError {
+			t.Errorf("expected tool error for %v: %+v", args, r)
+		}
+	}
+}
 
 func TestReadModule(t *testing.T) {
 	cs := fakeMoodle(t)
